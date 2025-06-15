@@ -1,4 +1,4 @@
-# EstinBib System Diagrams
+# EstinBib Digital Library System Diagrams
 
 ## Diagram 1 - Database Entity Relationship
 
@@ -12,7 +12,6 @@ erDiagram
         timestamp emailVerified
         varchar image
         Role role
-        varchar nfcCardId UK
         EducationYear educationYear
         timestamp createdAt
         timestamp updatedAt
@@ -158,14 +157,14 @@ erDiagram
     BORROWS ||--o{ BORROW_EXTENSIONS : "extended"
 ```
 
-## Diagram 2 - System Architecture
+## Diagram 2 - Web Application Architecture
 
 ```mermaid
 graph TB
-    subgraph "Client Layer"
-        WEB[Web Application]
-        MOBILE[Mobile App]
-        DESKTOP[Desktop App]
+    subgraph "Frontend Layer"
+        WEB[Next.js Web Application]
+        UI[React Components]
+        PAGES[Page Routes]
     end
     
     subgraph "API Layer"
@@ -182,12 +181,14 @@ graph TB
         SEMANTIC[Semantic Analysis]
         TRIGGERS[Special Triggers]
         EMBEDDING[Embedding Cache]
+        PDF[PDF Management]
     end
     
     subgraph "External Services"
         GEMINI[Google Gemini AI]
         NEXTAUTH[NextAuth.js]
-        NFC[NFC Card System]
+        GOOGLE[Google OAuth]
+        STORAGE[File Storage]
     end
     
     subgraph "Database Layer"
@@ -196,8 +197,8 @@ graph TB
     end
     
     WEB --> NEXTJS
-    MOBILE --> NEXTJS
-    DESKTOP --> NEXTJS
+    UI --> WEB
+    PAGES --> WEB
     
     NEXTJS --> AUTH
     NEXTJS --> BOOKS_API
@@ -210,8 +211,11 @@ graph TB
     CHAT_API --> TRIGGERS
     CHAT_API --> EMBEDDING
     
+    BOOKS_API --> PDF
     VECTOR --> GEMINI
     AUTH --> NEXTAUTH
+    AUTH --> GOOGLE
+    PDF --> STORAGE
     
     BOOKS_API --> DRIZZLE
     DASHBOARD_API --> DRIZZLE
@@ -221,7 +225,68 @@ graph TB
     DRIZZLE --> POSTGRES
 ```
 
-## Diagram 3 - AI Chat Sequence
+## Diagram 3 - Authentication Flow with @estin.dz Restriction
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant WEB as Web App
+    participant AUTH as Auth API
+    participant NEXTAUTH as NextAuth
+    participant DB as Database
+    participant GOOGLE as Google OAuth
+    
+    U->>WEB: Access protected route
+    WEB->>AUTH: Check authentication
+    AUTH->>NEXTAUTH: Validate session
+    
+    alt User not authenticated
+        NEXTAUTH-->>AUTH: No valid session
+        AUTH-->>WEB: Redirect to login
+        WEB-->>U: Show login page
+        
+        U->>WEB: Choose login method
+        alt Google OAuth Login
+            WEB->>NEXTAUTH: Initiate Google OAuth
+            NEXTAUTH->>GOOGLE: Redirect to Google
+            GOOGLE-->>U: Show consent screen
+            U->>GOOGLE: Grant permission
+            GOOGLE->>NEXTAUTH: Return user profile
+            
+            alt Email ends with @estin.dz
+                NEXTAUTH->>DB: Create/update user with STUDENT role
+                DB-->>NEXTAUTH: User data
+                NEXTAUTH-->>WEB: Create session
+                WEB-->>U: Redirect to dashboard
+            else Email not @estin.dz
+                NEXTAUTH-->>WEB: Authentication error
+                WEB-->>U: Show "Access restricted to @estin.dz emails"
+            end
+            
+        else Credentials Login
+            U->>WEB: Enter email/password
+            WEB->>AUTH: Validate credentials
+            
+            alt Email ends with @estin.dz
+                AUTH->>DB: Check user credentials
+                DB-->>AUTH: User data with role
+                AUTH->>NEXTAUTH: Create session
+                NEXTAUTH-->>WEB: Session created
+                WEB-->>U: Redirect to dashboard
+            else Email not @estin.dz
+                AUTH-->>WEB: Authentication error
+                WEB-->>U: Show "Access restricted to @estin.dz emails"
+            end
+        end
+        
+    else User authenticated
+        NEXTAUTH-->>AUTH: Valid session with role
+        AUTH-->>WEB: User data
+        WEB-->>U: Show protected content
+    end
+```
+
+## Diagram 4 - AI Chat System Flow
 
 ```mermaid
 sequenceDiagram
@@ -245,7 +310,7 @@ sequenceDiagram
             SEM-->>API: Flag as inappropriate
             API-->>U: Inappropriate content response
         else Content appropriate
-            API->>DB: Fetch all books
+            API->>DB: Fetch all books with PDF URLs
             DB-->>API: Return books list
             
             alt No books in database
@@ -279,7 +344,7 @@ sequenceDiagram
                         API-->>U: No relevant books found
                     else Relevant books found
                         API->>GEM: Generate contextual response
-                        GEM-->>API: AI response
+                        GEM-->>API: AI response with PDF links
                         API-->>U: Response with book recommendations
                     end
                 end
@@ -288,78 +353,29 @@ sequenceDiagram
     end
 ```
 
-## Diagram 4 - User Authentication Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant WEB as Web App
-    participant AUTH as Auth API
-    participant NEXTAUTH as NextAuth
-    participant DB as Database
-    participant PROVIDER as OAuth Provider
-    
-    U->>WEB: Access protected route
-    WEB->>AUTH: Check authentication
-    AUTH->>NEXTAUTH: Validate session
-    
-    alt User not authenticated
-        NEXTAUTH-->>AUTH: No valid session
-        AUTH-->>WEB: Redirect to login
-        WEB-->>U: Show login page
-        
-        U->>WEB: Choose login method
-        alt OAuth Login
-            WEB->>NEXTAUTH: Initiate OAuth
-            NEXTAUTH->>PROVIDER: Redirect to provider
-            PROVIDER-->>U: Show consent screen
-            U->>PROVIDER: Grant permission
-            PROVIDER->>NEXTAUTH: Return authorization code
-            NEXTAUTH->>PROVIDER: Exchange for tokens
-            PROVIDER-->>NEXTAUTH: Return access token
-            NEXTAUTH->>DB: Create/update user
-            DB-->>NEXTAUTH: User data
-            NEXTAUTH-->>WEB: Create session
-        else Email/Password
-            U->>WEB: Enter credentials
-            WEB->>AUTH: Validate credentials
-            AUTH->>DB: Check user credentials
-            DB-->>AUTH: User data
-            AUTH->>NEXTAUTH: Create session
-            NEXTAUTH-->>WEB: Session created
-        end
-        
-        WEB-->>U: Redirect to protected route
-    else User authenticated
-        NEXTAUTH-->>AUTH: Valid session
-        AUTH-->>WEB: User data
-        WEB-->>U: Show protected content
-    end
-```
-
-## Diagram 5 - Book Borrowing Workflow
+## Diagram 5 - Digital Book Borrowing Workflow
 
 ```mermaid
 flowchart TD
-    START([User wants to borrow book])
-    LOGIN{User logged in?}
-    AUTH[Redirect to login]
-    SEARCH[Search for book]
+    START([User wants to access digital book])
+    LOGIN{User logged in with @estin.dz?}
+    AUTH[Redirect to authentication]
+    SEARCH[Search for book/document]
     SELECT[Select book]
-    CHECK_AVAIL{Book available?}
+    CHECK_AVAIL{PDF available?}
     CHECK_LIMIT{Under borrow limit?}
-    REQUEST_BORROW[Request borrowing]
+    REQUEST_BORROW[Request PDF access]
     LIBRARIAN_APPROVE{Librarian approval needed?}
-    AUTO_APPROVE[Auto-approve borrowing]
+    AUTO_APPROVE[Auto-approve PDF access]
     MANUAL_APPROVE[Librarian reviews request]
     APPROVED{Request approved?}
     CREATE_BORROW[Create borrow record]
-    UPDATE_BOOK[Mark book as unavailable]
-    NOTIFY_USER[Notify user of approval]
+    GRANT_ACCESS[Grant PDF access]
+    NOTIFY_USER[Send PDF link to user]
     NOTIFY_REJECT[Notify user of rejection]
-    SET_DUE_DATE[Set due date]
-    BORROW_SUCCESS[Borrowing successful]
-    BOOK_UNAVAIL[Show book unavailable]
+    SET_DUE_DATE[Set return due date]
+    ACCESS_SUCCESS[User can access PDF]
+    BOOK_UNAVAIL[Show PDF unavailable]
     LIMIT_EXCEEDED[Show limit exceeded message]
     
     START --> LOGIN
@@ -379,13 +395,70 @@ flowchart TD
     MANUAL_APPROVE --> APPROVED
     APPROVED -->|Yes| CREATE_BORROW
     APPROVED -->|No| NOTIFY_REJECT
-    CREATE_BORROW --> UPDATE_BOOK
-    UPDATE_BOOK --> SET_DUE_DATE
+    CREATE_BORROW --> GRANT_ACCESS
+    GRANT_ACCESS --> SET_DUE_DATE
     SET_DUE_DATE --> NOTIFY_USER
-    NOTIFY_USER --> BORROW_SUCCESS
+    NOTIFY_USER --> ACCESS_SUCCESS
 ```
 
-## Diagram 6 - Complaint Management System
+## Diagram 6 - Book Content Management System
+
+```mermaid
+flowchart TD
+    subgraph "Content Upload"
+        LIBRARIAN[Librarian Login]
+        UPLOAD[Upload Book Content]
+        PDF_UPLOAD[Upload PDF File]
+        METADATA[Enter Book Metadata]
+        COVER[Upload Cover Image]
+    end
+    
+    subgraph "Processing"
+        VALIDATE[Validate File Format]
+        STORAGE[Store in File System]
+        PDF_URL[Generate PDF URL]
+        COMPRESS[Compress Images]
+        EXTRACT[Extract Text for Search]
+    end
+    
+    subgraph "Database"
+        SAVE_BOOK[Save Book Record]
+        CATEGORIES[Assign Categories]
+        INDEXING[Index for Search]
+        EMBEDDING[Generate AI Embeddings]
+    end
+    
+    subgraph "Availability"
+        PUBLISH[Mark as Available]
+        NOTIFY[Notify Users]
+        CATALOG[Add to Catalog]
+    end
+    
+    LIBRARIAN --> UPLOAD
+    UPLOAD --> PDF_UPLOAD
+    UPLOAD --> METADATA
+    UPLOAD --> COVER
+    
+    PDF_UPLOAD --> VALIDATE
+    METADATA --> VALIDATE
+    COVER --> COMPRESS
+    
+    VALIDATE --> STORAGE
+    STORAGE --> PDF_URL
+    COMPRESS --> STORAGE
+    
+    PDF_URL --> SAVE_BOOK
+    EXTRACT --> INDEXING
+    SAVE_BOOK --> CATEGORIES
+    CATEGORIES --> EMBEDDING
+    
+    EMBEDDING --> PUBLISH
+    INDEXING --> PUBLISH
+    PUBLISH --> NOTIFY
+    PUBLISH --> CATALOG
+```
+
+## Diagram 7 - Complaint Management System
 
 ```mermaid
 stateDiagram-v2
@@ -405,22 +478,124 @@ stateDiagram-v2
         - User can view status
         - Admin can add notes
         - System tracks timestamps
+        - Email notifications sent
     end note
     
     note right of InProgress
         - Admin updates progress
         - Internal notes added
         - User notified of progress
+        - Priority levels assigned
     end note
     
     note right of Resolved
         - Resolution notes added
         - User receives notification
         - Complaint archived
+        - Satisfaction survey sent
     end note
 ```
 
-## Diagram 7 - Deployment Architecture
+## Diagram 8 - User Role Management
+
+```mermaid
+graph TB
+    subgraph "User Registration"
+        EMAIL_CHECK{Email ends with @estin.dz?}
+        ALLOW[Allow Registration]
+        DENY[Deny Access]
+        DEFAULT_ROLE[Assign STUDENT Role]
+    end
+    
+    subgraph "Role Assignment"
+        STUDENT[STUDENT Role]
+        LIBRARIAN[LIBRARIAN Role]
+        ADMIN_PROMOTE[Admin Promotes User]
+    end
+    
+    subgraph "Permissions"
+        STUDENT_PERMS[
+            - Browse Books
+            - Request PDF Access
+            - Submit Complaints
+            - Chat with AI
+            - Request New Books
+        ]
+        
+        LIBRARIAN_PERMS[
+            - All Student Permissions
+            - Manage Books & PDFs
+            - Approve Borrow Requests
+            - Handle Complaints
+            - Manage Users
+            - Access Analytics
+        ]
+    end
+    
+    EMAIL_CHECK -->|Yes| ALLOW
+    EMAIL_CHECK -->|No| DENY
+    ALLOW --> DEFAULT_ROLE
+    DEFAULT_ROLE --> STUDENT
+    
+    ADMIN_PROMOTE --> LIBRARIAN
+    STUDENT --> ADMIN_PROMOTE
+    
+    STUDENT --> STUDENT_PERMS
+    LIBRARIAN --> LIBRARIAN_PERMS
+```
+
+## Diagram 9 - Search and Discovery System
+
+```mermaid
+graph TB
+    subgraph "Search Input"
+        USER_QUERY[User Search Query]
+        FILTERS[Apply Filters]
+        CATEGORIES[Category Selection]
+    end
+    
+    subgraph "Search Processing"
+        TEXT_SEARCH[Text-based Search]
+        SEMANTIC_SEARCH[AI Semantic Search]
+        VECTOR_MATCH[Vector Similarity]
+        COMBINE[Combine Results]
+    end
+    
+    subgraph "AI Enhancement"
+        GEMINI_EMBED[Generate Query Embedding]
+        BOOK_EMBED[Book Embeddings Cache]
+        SIMILARITY[Calculate Similarities]
+        RANK[Rank by Relevance]
+    end
+    
+    subgraph "Results"
+        BOOK_LIST[Filtered Book List]
+        PDF_LINKS[Include PDF URLs]
+        RECOMMENDATIONS[AI Recommendations]
+        PAGINATION[Paginated Results]
+    end
+    
+    USER_QUERY --> TEXT_SEARCH
+    USER_QUERY --> SEMANTIC_SEARCH
+    FILTERS --> TEXT_SEARCH
+    CATEGORIES --> TEXT_SEARCH
+    
+    SEMANTIC_SEARCH --> GEMINI_EMBED
+    GEMINI_EMBED --> VECTOR_MATCH
+    VECTOR_MATCH --> BOOK_EMBED
+    BOOK_EMBED --> SIMILARITY
+    SIMILARITY --> RANK
+    
+    TEXT_SEARCH --> COMBINE
+    RANK --> COMBINE
+    
+    COMBINE --> BOOK_LIST
+    BOOK_LIST --> PDF_LINKS
+    BOOK_LIST --> RECOMMENDATIONS
+    PDF_LINKS --> PAGINATION
+```
+
+## Diagram 10 - System Deployment Architecture
 
 ```mermaid
 graph TB
@@ -447,13 +622,14 @@ graph TB
         
         subgraph "External Services"
             GEMINI_PROD[Google Gemini AI]
-            AUTH_PROVIDER[OAuth Providers]
+            GOOGLE_AUTH[Google OAuth]
             MONITORING[Monitoring & Logging]
         end
         
         subgraph "Storage"
             REDIS[(Redis Cache)]
-            S3[File Storage]
+            PDF_STORAGE[PDF File Storage]
+            IMAGE_STORAGE[Image Storage]
         end
     end
     
@@ -473,17 +649,21 @@ graph TB
     APP2 --> REDIS
     APP3 --> REDIS
     
-    APP1 --> S3
-    APP2 --> S3
-    APP3 --> S3
+    APP1 --> PDF_STORAGE
+    APP2 --> PDF_STORAGE
+    APP3 --> PDF_STORAGE
+    
+    APP1 --> IMAGE_STORAGE
+    APP2 --> IMAGE_STORAGE
+    APP3 --> IMAGE_STORAGE
     
     APP1 --> GEMINI_PROD
     APP2 --> GEMINI_PROD
     APP3 --> GEMINI_PROD
     
-    APP1 --> AUTH_PROVIDER
-    APP2 --> AUTH_PROVIDER
-    APP3 --> AUTH_PROVIDER
+    APP1 --> GOOGLE_AUTH
+    APP2 --> GOOGLE_AUTH
+    APP3 --> GOOGLE_AUTH
     
     PRIMARY --> REPLICA1
     PRIMARY --> REPLICA2
@@ -491,51 +671,4 @@ graph TB
     APP1 --> MONITORING
     APP2 --> MONITORING
     APP3 --> MONITORING
-```
-
-## Diagram 8 - API Endpoints Overview
-
-```mermaid
-mindmap
-    root((EstinBib API))
-        Authentication
-            /api/auth/signin
-            /api/auth/signout
-            /api/auth/callback
-            /api/auth/session
-        Books Management
-            /api/books
-                GET (list books)
-                POST (create book)
-            /api/books/[id]
-                GET (get book)
-                PUT (update book)
-                DELETE (delete book)
-            /api/books/search
-            /api/books/filter
-        User Management
-            /api/user
-                GET (profile)
-                PUT (update profile)
-            /api/users
-                GET (list users)
-                POST (create user)
-        Dashboard
-            /api/dashboard/analytics
-            /api/dashboard/books
-            /api/dashboard/borrows
-            /api/dashboard/users
-            /api/dashboard/complaints
-            /api/dashboard/requests
-            /api/dashboard/sndl
-        Chat System
-            /api/chat
-                POST (chat with AI)
-        Categories
-            /api/categories
-                GET (list categories)
-                POST (create category)
-        Search & Filter
-            /api/search
-            /api/filter-data
 ```
