@@ -871,3 +871,60 @@ graph TB
     
     CDN --> CLOUDINARY_PROD
 ```
+
+
+## Diagram 13 - SNDL Request System
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending : User submits SNDL request
+    
+    Pending --> Approved : Librarian approves request
+    Pending --> Rejected : Librarian rejects request
+    
+    Approved --> [*] : Request processed
+    Rejected --> [*] : Request closed
+    
+    note right of Pending
+        - User provides request reason
+        - System tracks submission time
+        - Auto-assigns to librarian queue
+        - Email notification sent
+        - Status visible to user
+    end note
+    
+    note right of Approved
+        - Admin notes added
+        - Processing timestamp recorded
+        - User receives approval notification
+        - Request marked as processed
+        - Approved by librarian ID tracked
+    end note
+    
+    note right of Rejected
+        - Rejection reason documented
+        - Admin notes explaining decision
+        - User notified of rejection
+        - Processing timestamp recorded
+        - Approved by librarian ID tracked
+    end note
+```
+
+## Diagram 14 - Idea Box System
+
+```mermaid
+stateDiagram-v2
+    [*] --> Submitted : User submits idea
+    
+    Submitted --> [*] : Idea stored in system
+    
+    note right of Submitted
+        - Max 500 characters allowed
+        - User ID linked for attribution
+        - Creation timestamp recorded
+        - Ideas visible to librarians
+        - No approval workflow needed
+    end note
+```
+
+
