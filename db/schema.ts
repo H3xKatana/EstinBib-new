@@ -19,8 +19,9 @@ export const users = pgTable("user", {
     .primaryKey()
     .$defaultFn(() => createId()),
   name: varchar("name").notNull(),
-  email: varchar("email").notNull().unique(),
-  password: varchar("password"),
+  numeroDeBac: varchar("numero_de_bac", { length: 20 }).notNull().unique(), // Unique bac number for login
+  password: varchar("password").notNull(), // Hashed password - now required
+  email: varchar("email").unique(), // Optional email for Google OAuth only
   emailVerified: timestamp("emailVerified"),
   image: varchar("image"),
   role: roleEnum("role").notNull().default("STUDENT"),
@@ -31,7 +32,9 @@ export const users = pgTable("user", {
     .notNull()
     .defaultNow()
     .$onUpdateFn(() => new Date()),
-});
+}, (table) => [
+  index("numero_de_bac_idx").on(table.numeroDeBac), // Index for faster login queries
+]);
 
 export const bookTypeEnum = pgEnum("BookType", ["BOOK", "DOCUMENT", "PERIODIC", "ARTICLE"]);
 

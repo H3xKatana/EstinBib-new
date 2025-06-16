@@ -3,6 +3,7 @@ import { db } from "@/db"
 import { users } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { getServerAuthSession } from "@/lib/auth"
+import bcrypt from "bcryptjs"
 
 type Context = {
   params: Promise<{
@@ -35,7 +36,20 @@ export async function GET(
       }
       
       const user = await db
-        .select()
+        .select({
+          id: users.id,
+          name: users.name,
+          numeroDeBac: users.numeroDeBac,
+          email: users.email,
+          emailVerified: users.emailVerified,
+          image: users.image,
+          role: users.role,
+          nfcCardId: users.nfcCardId,
+          educationYear: users.educationYear,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+          // Exclude password from response
+        })
         .from(users)
         .where(eq(users.id, userId))
         .limit(1)
@@ -57,9 +71,22 @@ export async function GET(
     const limit = parseInt(url.searchParams.get("limit") || "10")
     const offset = parseInt(url.searchParams.get("offset") || "0")
     
-    // Get all users with pagination
+    // Get all users with pagination (exclude passwords)
     const allUsers = await db
-      .select()
+      .select({
+        id: users.id,
+        name: users.name,
+        numeroDeBac: users.numeroDeBac,
+        email: users.email,
+        emailVerified: users.emailVerified,
+        image: users.image,
+        role: users.role,
+        nfcCardId: users.nfcCardId,
+        educationYear: users.educationYear,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        // Exclude password from response
+      })
       .from(users)
       .limit(limit)
       .offset(offset)
@@ -102,11 +129,21 @@ export async function DELETE(
       return new NextResponse("Cannot delete your own account", { status: 400 })
     }
     
-    // Delete user
+    // Delete user (return without password)
     const [deleted] = await db
       .delete(users)
       .where(eq(users.id, userId))
-      .returning()
+      .returning({
+        id: users.id,
+        name: users.name,
+        numeroDeBac: users.numeroDeBac,
+        email: users.email,
+        role: users.role,
+        nfcCardId: users.nfcCardId,
+        educationYear: users.educationYear,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
     
     if (!deleted) {
       return new NextResponse("User not found", { status: 404 })
@@ -118,7 +155,6 @@ export async function DELETE(
     return new NextResponse("Internal error", { status: 500 })
   }
 }
-
 
 /**
  * PUT - Update user information
@@ -147,30 +183,79 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, email, role, nfcCardId, educationYear } = body
+    const { name, email, role, nfcCardId, educationYear, numeroDeBac, password } = body
 
     // Validate input
-    if (!name || !email) {
-      return new NextResponse("Name and email are required", { status: 400 })
+    if (!name) {
+      return new NextResponse("Name is required", { status: 400 })
     }
 
-    // Only librarians can update roles
-    if (role && session.user.role !== "LIBRARIAN") {
-      return new NextResponse("Cannot update role", { status: 403 })
+    // Only librarians can update roles and numeroDeBac
+    if ((role || numeroDeBac) && session.user.role !== "LIBRARIAN") {
+      return new NextResponse("Cannot update role or numero de bac", { status: 403 })
+    }
+
+    // Validate numeroDeBac format if provided (you can adjust this regex as needed)
+    if (numeroDeBac && !/^[0-9]{8,20}$/.test(numeroDeBac)) {
+      return new NextResponse("Invalid numero de bac format", { status: 400 })
+    }
+
+    // Check if numeroDeBac already exists (if updating)
+    if (numeroDeBac) {
+      const existingUser = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.numeroDeBac, numeroDeBac))
+        .limit(1)
+      
+      if (existingUser.length > 0 && existingUser[0].id !== userId) {
+        return new NextResponse("Numero de bac already exists", { status: 409 })
+      }
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      name,
+      updatedAt: new Date()
+    }
+
+    // Add optional fields if provided
+    if (email !== undefined) updateData.email = email
+    if (nfcCardId !== undefined) updateData.nfcCardId = nfcCardId
+    if (educationYear !== undefined) updateData.educationYear = educationYear as "1CP" | "2CP" | "1CS" | "2CS" | "3CS" | null
+    
+    // Only librarians can update these fields
+    if (session.user.role === "LIBRARIAN") {
+      if (role !== undefined) updateData.role = role as "STUDENT" | "LIBRARIAN"
+      if (numeroDeBac !== undefined) updateData.numeroDeBac = numeroDeBac
+    }
+
+    // Hash password if provided
+    if (password) {
+      if (password.length < 6) {
+        return new NextResponse("Password must be at least 6 characters", { status: 400 })
+      }
+      updateData.password = await bcrypt.hash(password, 10)
     }
 
     const [updated] = await db
       .update(users)
-      .set({
-        name,
-        email,
-        role: role as "STUDENT" | "LIBRARIAN",
-        nfcCardId,
-        educationYear: educationYear as "1CP" | "2CP" | "1CS" | "2CS" | "3CS" | null,
-        updatedAt: new Date()
-      })
+      .set(updateData)
       .where(eq(users.id, userId))
-      .returning()
+      .returning({
+        id: users.id,
+        name: users.name,
+        numeroDeBac: users.numeroDeBac,
+        email: users.email,
+        emailVerified: users.emailVerified,
+        image: users.image,
+        role: users.role,
+        nfcCardId: users.nfcCardId,
+        educationYear: users.educationYear,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        // Exclude password from response
+      })
 
     if (!updated) {
       return new NextResponse("User not found", { status: 404 })
