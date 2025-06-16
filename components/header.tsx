@@ -71,7 +71,7 @@ const Header: React.FC<HeaderProps> = ({ session }) => {
         {
           key: 'reserve-screening-room',
           label: 'Reserve Screening Room',
-          href: '/reserve-box',
+          href: '/reserve-room',
           Icon: Video,             // 🎥 screening-room icon
         },
       ]

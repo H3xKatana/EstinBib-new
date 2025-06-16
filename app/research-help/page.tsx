@@ -24,7 +24,7 @@ export default function ResearchHelpPage() {
         {
           name: 'OPAC ESTIN',
           description: 'Consultez et réservez vos documents en ligne.',
-          link: '/catalogue',
+          link: '/catalog',
           Icon: Search,
         },
         {

@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server"
 import { db } from "@/db"
 import { borrows, users } from "@/db/schema"
-import { count, eq, and, sql } from "drizzle-orm"
+import { count, eq, and, sql, gte, lt, isNull, isNotNull } from "drizzle-orm"
 
 export async function GET() {
   try {
- 
     // Get current timestamp for calculations
     const now = new Date()
     const sixMonthsAgo = new Date(now);
     sixMonthsAgo.setMonth(now.getMonth() - 6);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    // Get active borrowers (users with current borrows)
+    // Get active borrowers (users with current borrows in last 30 days)
     const activeBorrowers = await db
       .select({
         count: count(),
@@ -19,8 +19,8 @@ export async function GET() {
       .from(borrows)
       .where(
         and(
-          sql`${borrows.returnedAt} IS NULL`,
-          sql`${borrows.borrowedAt} > ${new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)}`
+          isNull(borrows.returnedAt),
+          gte(borrows.borrowedAt, thirtyDaysAgo)
         )
       )
 
@@ -47,8 +47,8 @@ export async function GET() {
       .from(borrows)
       .where(
         and(
-          sql`${borrows.returnedAt} IS NULL`,
-          sql`${borrows.dueDate} < ${now}`
+          isNull(borrows.returnedAt),
+          lt(borrows.dueDate, now)
         )
       )
 
@@ -58,7 +58,7 @@ export async function GET() {
       const date = new Date(now);
       date.setMonth(now.getMonth() - i);
       months.unshift({
-        month: date.getMonth(),
+        month: date.getMonth() + 1, // SQL months are 1-based
         year: date.getFullYear(),
         monthName: new Intl.DateTimeFormat('en', { month: 'short' }).format(date)
       });
@@ -72,7 +72,7 @@ export async function GET() {
         count: count().as("count")
       })
       .from(borrows)
-      .where(sql`${borrows.borrowedAt} >= ${sixMonthsAgo}`)
+      .where(gte(borrows.borrowedAt, sixMonthsAgo))
       .groupBy(sql`EXTRACT(MONTH FROM ${borrows.borrowedAt})`, sql`EXTRACT(YEAR FROM ${borrows.borrowedAt})`)
 
     // Query to get return counts by month
@@ -84,8 +84,8 @@ export async function GET() {
       })
       .from(borrows)
       .where(and(
-        sql`${borrows.returnedAt} IS NOT NULL`,
-        sql`${borrows.returnedAt} >= ${sixMonthsAgo}`
+        isNotNull(borrows.returnedAt),
+        gte(borrows.returnedAt, sixMonthsAgo)
       ))
       .groupBy(sql`EXTRACT(MONTH FROM ${borrows.returnedAt})`, sql`EXTRACT(YEAR FROM ${borrows.returnedAt})`)
 
