@@ -86,7 +86,7 @@ services:
     container_name: library_app
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "4444:3000"
     environment:
       # Database Configuration
       POSTGRES_DB: neondb
@@ -135,7 +135,7 @@ services:
     container_name: library_adminer
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "7777:8080"
     networks:
       - library_network
     depends_on:
