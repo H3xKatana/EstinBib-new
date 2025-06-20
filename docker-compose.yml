@@ -87,6 +87,8 @@ services:
     restart: unless-stopped
     ports:
       - "4444:3000"
+    expose:
+      - 4444
     environment:
       # Database Configuration
       POSTGRES_DB: neondb
@@ -136,6 +138,8 @@ services:
     restart: unless-stopped
     ports:
       - "7777:8080"
+    expose:
+      - 7777
     networks:
       - library_network
     depends_on:
